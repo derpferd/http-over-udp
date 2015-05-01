@@ -41,18 +41,9 @@ class ProxyHTTP(object):
 		print 'recving:', target.recv(10000000)
 		print 'recving:', target.recv(10000000)
 
+		target.send(s_id+" BYE")
 
+		return ''.join(page)
 
-# target = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-# target.connect(("131.212.205.152", 9090))
-# print 'sending:', target.send("HEY")
-# s_id = target.recv(1000)
-# print 'recving:', s_id
-# print 'sending:', target.send(s_id+" SET_DEST d.umn.edu 80")
-# # print 'sending:', target.send(s_id+" SET_DEST google.com 80")
-# print 'recving:', target.recv(1000)
-# print 'sending:', target.send(s_id+" SEND GET http://d.umn.edu/~beau0307/\r\n\r\n")
-# # print 'sending:', target.send(s_id+" SEND GET /\r\n\r\n")
-# print 'recving:', target.recv(10000000)
 
 ProxyHTTP(("d.umn.edu", 80), ("127.0.0.1", 9090)).get("http://d.umn.edu/~beau0307/book.txt")
