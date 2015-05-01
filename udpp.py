@@ -137,7 +137,7 @@ class TheServer:
                         if session.forward:
                             session.sendForward(msg)
                     elif data.split()[1] == "RESEND":
-                        msg = data.split[2:]
+                        msg = data.split[2:]()
                         session.resend(msg)
                     elif data.split()[1] == "BYE":
                         self.input_list.remove(session.forward)
