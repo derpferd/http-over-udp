@@ -72,6 +72,10 @@ class Session(object):
         if length != sent:
             print "Length not equal", length, "!=", sent, "packet not sent, we are not retrying"
  
+    def resend(self, packets_rsnd):
+        for i in packets_rsnd:
+            send_pack(self, self.packets[i], len(self.packets), i)
+
 class TheServer:
     input_list = []
     channel = {}
@@ -132,6 +136,9 @@ class TheServer:
                         msg = data[data.index(" ", 2)+1:]
                         if session.forward:
                             session.sendForward(msg)
+                    elif data.split()[1] == "RESEND":
+                        msg = data.split[2:]
+                        session.resend(msg)
                     elif data.split()[1] == "BYE":
                         self.input_list.remove(session.forward)
                         session.forward.close()
