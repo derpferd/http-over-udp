@@ -17,10 +17,13 @@ buffer_size = 4096
 # Set this lower for production, like 0.0001
 delay = 0.5
 
+def chunkstring(string, length):
+    return [string[0+i: length+1] for i in range(0, len(string), length)]
 
 class Session(object):
     def __init__(self, s_id, host, port, server_socket):
         self.id = s_id
+        self.buffer = ""
         self.host = host
         self.port = port
         self.dest = ('', 80)
@@ -41,17 +44,38 @@ class Session(object):
             return False
 
     def sendForward(self, data):
-        print "Sending", data
+        self.buffer = ""
         self.forward.send(data)
 
+    def on_recv(self, data):
+        #append to the buffer
+        self.buffer += data
+
+    def on_close(self):
+        if self.buffer:
+            self.send(self.buffer)
+
     def send(self, data):
-        length = len(data)
-        sent = self.server.sendto(data, (self.host, self.port))
+        self.packets = []
+        for i in range(0, len(data), buffer_size):
+            self.packets.append(data[i: i+buffer_size])
+
+        for i, packet_msg in enumerate(self.packets):
+            # print "Sending pack", i, "of", len(self.packets), "with", packet_msg
+            self.send_pack(packet_msg, len(self.packets), i+1)
+
+    def send_pack(self, data, total, packet_num):
+        msg = str(packet_num) + " " + str(total) + " " + data
+        length = len(msg)
+        sent = self.server.sendto(msg, (self.host, self.port))
 
         if length != sent:
-            print "Length not equal", length, "!=", sent
-
+            print "Length not equal", length, "!=", sent, "packet not sent, we are not retrying"
  
+    def resend(self, packets_rsnd):
+        for i in packets_rsnd:
+            send_pack(self, self.packets[i], len(self.packets), i)
+
 class TheServer:
     input_list = []
     channel = {}
@@ -112,6 +136,9 @@ class TheServer:
                         msg = data[data.index(" ", 2)+1:]
                         if session.forward:
                             session.sendForward(msg)
+                    elif data.split()[1] == "RESEND":
+                        msg = data.split[2:]()
+                        session.resend(msg)
                     elif data.split()[1] == "BYE":
                         self.input_list.remove(session.forward)
                         session.forward.close()
@@ -131,6 +158,7 @@ class TheServer:
                         self.on_recv()
                     else:
                         print "Connection closed"
+                        self.channel[self.s].on_close()
                         self.s.close()
                         self.input_list.remove(self.s)
             else:
@@ -140,7 +168,7 @@ class TheServer:
         data = self.data
         # here we can parse and/or modify the data before send forward
         print "Received TCP:", data
-        self.channel[self.s].send(data)
+        self.channel[self.s].on_recv(data)
  
 if __name__ == '__main__':
         server = TheServer('', 9090)
