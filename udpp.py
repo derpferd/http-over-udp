@@ -8,9 +8,14 @@ import sys
 # Most of these will require client side coding as of right now there is none.
 # THIS IS DONE 1. The client will only receive a max of the buffer_size(4096 bytes) of the requested website
 # 2. Any packets that are lost can not be recovered and as of now neither side know about packet loss.
+# -----> Is there any way that we could send a number letting the reciever know about how many packets are going to be sent as a preface
+# -----> this would allow for us to track which ones are missing/not missing as well?
 # 3. Can not reset destination.
+# -----> A simple stop command maybe? Could interrupt the flow of packets by having STOP thrown to the server where it would then cut off packet supply
+# -----> while the client would discard the expected packet number?
 # 4. Need to track state of forward. This way we can reconnect if the forward times out or send an error message if the destination was not set.
 # 5. No session clean up. (We probably need a timeout for garbage collection.)
+# -----> Any way we could dirty bit out packets so that once we are done with it, we have a way of garbage collection while still working?
 
 
 buffer_size = 4096
