@@ -40,7 +40,10 @@ DEFAULT_CERT_FILE = "./cert/ncerts/proxpy.pem"
 
 proxystate = None
 
+#This class handles all requests from the client to the server. 
 class ProxyHandler(SocketServer.StreamRequestHandler):
+    CURRENT_ID = 1
+
     def __init__(self, request, client_address, server):
         self.peer = False
         self.keepalive = False
@@ -49,48 +52,29 @@ class ProxyHandler(SocketServer.StreamRequestHandler):
         self.counter = 0
         self._host = None
         self._port = 0
+        self._id = self.CURRENT_ID
+        print "Making current ID", self.CURRENT_ID
+        self.CURRENT_ID += 1
 
         SocketServer.StreamRequestHandler.__init__(self, request, client_address, server)
-    
-    # def createConnection(self, host, port):
-    #     global proxystate
 
-    #     if proxystate.target and self._host == host:
-    #         return proxystate.target
-
-    #     try:
-    #         # If a SSL tunnel was established, create a HTTPS connection to the server
-    #         if self.peer:
-    #             conn = httplib.HTTPSConnection(host, port)
-    #         else:
-    #             # HTTP Connection
-    #             conn = httplib.HTTPConnection(host, port)
-    #     except HTTPException as e:
-    #         proxystate.log.debug(e.__str__())
-
-    #     # If we need a persistent connection, add the socket to the dictionary
-    #     if self.keepalive:
-    #         proxystate.target = conn
-
-    #     self._host = host
-    #     self._port = port
-            
-    #     return conn
-
+    #Writes to the socket
     def sendResponse(self, res):
         self.wfile.write(res)
-
+    
+    #stop listening if keepalive == true else keep listening
     def finish(self):
         if not self.keepalive:
-            if proxystate.target:
-                proxystate.target.close()
             return SocketServer.StreamRequestHandler.finish(self)
 
         # Otherwise keep-alive is True, then go on and listen on the socket
         return self.handle()
-
+    
+    
     def handle(self):
         global proxystate
+
+        print self._id, "Handling connection"
 
         if self.keepalive:
             if self.peer:
@@ -112,23 +96,21 @@ class ProxyHandler(SocketServer.StreamRequestHandler):
         if req is None:
             return
 
-        # Delegate request to plugin
-        req = ProxyPlugin.delegate(ProxyPlugin.EVENT_MANGLE_REQUEST, req.clone())
-
         # if you need a persistent connection set the flag in order to save the status
         if req.isKeepAlive():
             self.keepalive = True
         else:
             self.keepalive = False
-        
+
         # Target server host and port
         host, port = ProxyState.getTargetHost(req)
 
         res = self.doRequest(req)
-        print "DID REQ:", res
+        print self._id, "DID REQ:", res
         if res:
+            print self._id, "sending response: ", str(res)[str(res).index("\n")+1:]
             self.sendResponse(res)
-        
+
         # if req.getMethod() == HTTPRequest.METHOD_GET:
         #     res = self.doGET(host, port, req)
         #     self.sendResponse(res)
@@ -153,52 +135,32 @@ class ProxyHandler(SocketServer.StreamRequestHandler):
         if len(params) > 0:
             conn.send(params)
 
-    # def doRequest(self, conn, method, path, params, headers):
-    #     global proxystate
-    #     try:
-    #         self._request(conn, method, path, params, headers)
-    #         return True
-    #     except IOError as e:
-    #         proxystate.log.error("%s: %s:%d" % (e.__str__(), conn.host, conn.port))
-    #         return False
+    def getOpenConnection(self):
+        for conn in proxystate.proxyConnections:
+            if not conn.in_use:
+                return conn
+        conn = UDPConn("127.0.0.1", 9090)
+        proxystate.proxyConnections.append(conn)
+        return conn
 
     def doRequest(self, req):
-        proxystate.target.send(req.packToJson())
+        conn = self.getOpenConnection()
+        conn.in_use = True
+        conn.send(req.packToPack())
+        if conn.s_id:
+            print "ProxyHandler", self._id, "using UDPConn", conn.s_id
 
-        msg = proxystate.target.recv()
-        print "DID requ:", msg
+        msg = conn.recv()
+        conn.in_use = False
+        print self._id, "DID requ:", msg
         if msg != "GOOD":
-            res = HTTPResponse.buildWithJson(msg)
+            res = HTTPResponse.buildWithPack(msg)
             data = res.serialize()
             return data
         else:
             if reg.getMethod == HTTPRequest.METHOD_CONNECT:
                 self.doCONNECT()
             return None
-
-    # def doGETold(self, host, port, req):
-    #     conn = self.createConnection(host, port)
-    #     if not self.doRequest(conn, "GET", req.getPath(), '', req.headers): return ''
-    #     # Delegate response to plugin
-    #     res = self._getresponse(conn)
-    #     res = ProxyPlugin.delegate(ProxyPlugin.EVENT_MANGLE_RESPONSE, res.clone())
-    #     data = res.serialize()
-    #     return data
-
-    # def doPOST(self, host, port, req):
-    #     conn = self.createConnection(host, port)
-    #     params = urllib.urlencode(req.getParams(HTTPRequest.METHOD_POST))
-    #     if not self.doRequest(conn, "POST", req.getPath(), params, req.headers): return ''
-    #     # Delegate response to plugin
-    #     res = self._getresponse(conn)
-    #     res = ProxyPlugin.delegate(ProxyPlugin.EVENT_MANGLE_RESPONSE, res.clone())
-    #     data = res.serialize()
-    #     return data
-
-    # def doCONNECT(self, host, port, req):
-    #     global proxystate
-
-        
 
     def doCONNECT(self, host, port, req):
         global proxystate
@@ -282,7 +244,7 @@ class ProxyServer():
 class ProxyState:
     def __init__(self, port = 8080, addr = "0.0.0.0"):
         # Configuration options, set to default values
-        self.plugin     = ProxyPlugin()
+        # self.plugin     = ProxyPlugin()
         self.listenport = port
         self.listenaddr = addr
         self.dumpfile   = None
@@ -291,7 +253,7 @@ class ProxyState:
         self.log        = Logger()
         self.history    = HttpHistory()
         self.redirect   = None
-        self.target = UDPConn("127.0.0.1", 9090)
+        self.proxyConnections = [UDPConn("127.0.0.1", 9090)]
 
     @staticmethod
     def getTargetHost(req):
@@ -304,78 +266,6 @@ class ProxyState:
 
         return target
 
-class ProxyPlugin:
-    EVENT_MANGLE_REQUEST  = 1
-    EVENT_MANGLE_RESPONSE = 2
-
-    __DISPATCH_MAP = {
-        EVENT_MANGLE_REQUEST:  'proxy_mangle_request',
-        EVENT_MANGLE_RESPONSE: 'proxy_mangle_response',
-        }
-
-    def __init__(self, filename = None):
-        self.filename = filename
-    
-        if filename is not None:
-            import imp
-            assert os.path.isfile(filename)
-            self.module = imp.load_source('plugin', self.filename)
-        else:
-            self.module = None
-
-    def dispatch(self, event, *args):
-        if self.module is None:
-            # No plugin
-            return None
-
-        assert event in ProxyPlugin.__DISPATCH_MAP
-        try:
-            a = getattr(self.module, ProxyPlugin.__DISPATCH_MAP[event])
-        except AttributeError:
-            a = None
-
-        if a is not None:
-            r = a(*args)
-        else:
-            r = None
-            
-        return r
-
-    @staticmethod
-    def delegate(event, arg):
-        global proxystate
-
-        # Allocate a history entry
-        hid = proxystate.history.allocate()
-
-        if event == ProxyPlugin.EVENT_MANGLE_REQUEST:
-            proxystate.history[hid].setOriginalRequest(arg)
-
-            # Process this argument through the plugin
-            mangled_arg = proxystate.plugin.dispatch(ProxyPlugin.EVENT_MANGLE_REQUEST, arg.clone())
-
-        elif event == ProxyPlugin.EVENT_MANGLE_RESPONSE:
-            proxystate.history[hid].setOriginalResponse(arg)
-
-            # Process this argument through the plugin
-            mangled_arg = proxystate.plugin.dispatch(ProxyPlugin.EVENT_MANGLE_RESPONSE, arg.clone())
-
-        if mangled_arg is not None:
-            if event == ProxyPlugin.EVENT_MANGLE_REQUEST:
-                proxystate.history[hid].setMangledRequest(mangled_arg)
-            elif event == ProxyPlugin.EVENT_MANGLE_RESPONSE:
-                proxystate.history[hid].setMangledResponse(mangled_arg)
-
-            # HTTPConnection.request does the dirty work :-)
-            ret = mangled_arg
-        else:
-            # No plugin is currently installed, or the plugin does not define
-            # the proper method, or it returned None. We fall back on the
-            # original argument
-            ret = arg
-
-        return ret
-
 class UDPConn(object):
     BUFFER_SIZE = 4096
 
@@ -385,13 +275,14 @@ class UDPConn(object):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.connect((host, port))
         self.s_id = None
+        self.in_use = False
 
     def send(self, data):
         if not self.s_id:  # if not connected, connect and get id
-            print "Sending HEY"
+            print self.s_id,  "Sending HEY"
             self.sock.send("HEY")
-            self.s_id = self.sock.recv(self.BUFFER_SIZE+8).strip()
-            print "GOT id:", self.s_id
+            self.s_id = self.sock.recv(self.BUFFER_SIZE+20).strip()
+            print self.s_id,  "GOT id:", self.s_id
 
         print "Sending data"
         # split data into packets
@@ -403,20 +294,16 @@ class UDPConn(object):
         for i, packet_msg in enumerate(self.packets):
             self.send_pack(packet_msg, len(self.packets), i+1)
 
-        # print "Sent packs"
-        # self.sock.send("asdf")
-        # self.sock.recv(self.BUFFER_SIZE+8)
-
         # listen for a conformation or need for retransmission
         need_resend = True
         while need_resend:
-            print "In resend loop"
-            msg = self.sock.recv(self.BUFFER_SIZE+8)
-            print "Got Msg"
+            print  self.s_id,  " In resend loop"
+            msg = self.sock.recv(self.BUFFER_SIZE+20)
+            print  self.s_id,  " Got Msg"
             if not len(msg.split()) > 1:
                 continue
             if msg.split()[1] == "RESEND":
-                print "Needed RESEND:", msg
+                print  self.s_id,  " Needed RESEND:", msg
                 # TODO: implement
                 pass
             elif msg.split()[1] == "GOOD":
@@ -426,11 +313,12 @@ class UDPConn(object):
 
     def recv(self):
         if not self.s_id: # if not connected, there is no way to receive data
-            print "No session"
+            print  self.s_id, " No session"
             return
 
-        print "Receiving data"
-        pack = self.sock.recv(self.BUFFER_SIZE+8)
+        print  self.s_id, " Receiving data"
+        pack = self.sock.recv(self.BUFFER_SIZE+20)
+        print "RECVED FRAME:", pack
         cur_p = pack.split()[1]
         total_p = pack.split()[2]
 
@@ -439,7 +327,9 @@ class UDPConn(object):
         page[int(cur_p)-1] = pack
 
         for i in range(int(total_p)-1):
-            pack = self.sock.recv(self.BUFFER_SIZE+8)
+            print "Waiting for pack:", i+2, "of", total_p
+            pack = self.sock.recv(self.BUFFER_SIZE+20)
+            print "RECVED FRAME"
             cur_p = pack.split()[1]
             total_p = pack.split()[2]
             pack = pack[pack.index(" ", 4)+1:]
@@ -449,7 +339,7 @@ class UDPConn(object):
 
         self.sock.send(self.s_id + " GOOD")
 
-        print "GOT RECV:", msg
+        print  self.s_id,  " GOT RECV:", msg
 
         return msg
 

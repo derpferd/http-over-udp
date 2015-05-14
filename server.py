@@ -9,13 +9,19 @@ from http import HTTPRequest
 from http import HTTPResponse
 
 
+# Buffer size for receiving and sending data
 BUFFER_SIZE = 4096
 # Set this lower for production, like 0.0001
 DELAY = 0.5
 
+# This function is used for spliting a string into an array of
+# string with the specified length. The last string may not be
+# of the same length
 def chunkstring(string, length):
     return [string[0+i: length+1] for i in range(0, len(string), length)]
 
+
+# This class is a thread used of handling a single "connection"
 class SessionThread(threading.Thread):
     def __init__(self, channel, addr, sock):
         super(SessionThread, self).__init__()
@@ -57,17 +63,18 @@ class SessionThread(threading.Thread):
         print "GOT RECV:", msg
 
         return msg
-
+        
+    #Splits data into packets, communicates with client if it is necessary to resend data, keeps a log of all the 
+    #packets that are being sent so we can resend
     def send(self, data):
         print "Sending data"
         # split data into packets
-        data = "SEND " + data
         self.packets = []
         for i in range(0, len(data), BUFFER_SIZE):
             self.packets.append(data[i: i+BUFFER_SIZE])
 
         for i, packet_msg in enumerate(self.packets):
-            self.send_pack(packet_msg, len(self.packets), i+1)
+            self.send_pack(packet_msg, i+1, len(self.packets))
 
         # listen for a conformation or need for retransmission
         need_resend = True
@@ -86,6 +93,7 @@ class SessionThread(threading.Thread):
 
         print "Data sent"
 
+    #creates message, then sends message with length off too the send_frame
     def send_pack(self, data, num, total):
         msg = "0 " + str(num) + " " + str(total) + " " + data
         length = len(msg)
@@ -94,6 +102,7 @@ class SessionThread(threading.Thread):
         if length != sent:
             print "Length not equal", length, "!=", sent, "packet not sent, we are not retrying"
 
+    #recv_frame waits for an incoming packet then returns a new channel
     def recv_frame(self, blocking=True):
         while blocking:
             if len(self.channel) > 0:
@@ -102,24 +111,36 @@ class SessionThread(threading.Thread):
         if len(self.channel) > 0:
             return self.channel.pop()
 
+    #sends data off to the client
     def send_frame(self, data):
         # sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         print "Sending frame to:", self.addr
         return self.sock.sendto(str(data), self.addr)
 
+    #Waits for packet and processes requests
     def run(self):
         while True:
             msg = self.recv()
             if msg.split()[0] == "SEND":
                 print "Good send command"
                 data = msg[msg.index(" ")+1:]
-                request = HTTPRequest.buildWithPack(data)
-                print request
+                req = HTTPRequest.buildWithPack(data)
+                print req
                 print "Handling request"
                 
                 host, port = request.getHost()
                 
-                res = self.doGET(host, port, request)
+                
+                if req.getMethod() == HTTPRequest.METHOD_GET:
+                    res = self.doGET(host, port, req)
+                    self.sendResponse(res)
+                elif req.getMethod() == HTTPRequest.METHOD_POST:
+                    res = self.doPOST(host, port, req)
+                    self.sendResponse(res)
+                elif req.getMethod() == HTTPRequest.METHOD_CONNECT:
+                    print "Not Implemented yet"
+                    # res = self.doCONNECT(host, port, req)
+                # TODO: add POST and CONNECT
                 
                 print "Got res", res
                 
@@ -156,7 +177,6 @@ class SessionThread(threading.Thread):
         return conn
 
     def _request(self, conn, method, path, params, headers):
-        global proxystate
         conn.putrequest(method, path, skip_host = True, skip_accept_encoding = True)
         for header,v in headers.iteritems():
             # auto-fix content-length
@@ -180,7 +200,6 @@ class SessionThread(threading.Thread):
     def doGET(self, host, port, req):
         conn = self.createConnection(host, port)
         if not self.doRequest(conn, "GET", req.getPath(), '', req.headers): return ''
-        # Delegate response to plugin
         res = self._getresponse(conn)
         return res
 
@@ -188,7 +207,6 @@ class SessionThread(threading.Thread):
         conn = self.createConnection(host, port)
         params = urllib.urlencode(req.getParams(HTTPRequest.METHOD_POST))
         if not self.doRequest(conn, "POST", req.getPath(), params, req.headers): return ''
-        # Delegate response to plugin
         res = self._getresponse(conn)
         return res
 
@@ -212,7 +230,7 @@ class SessionThread(threading.Thread):
 
         return res
 
-
+#Handles requests, makes new threads for new connections
 class TheServer:
     def __init__(self, host, port):
         self.server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -252,7 +270,7 @@ class TheServer:
                     #TODO: implement bye
                     
                     self.channels[s_id].insert(0, data)
-
+#MAIN METHOD
 if __name__ == '__main__':
         server = TheServer('', 9090)
         try:

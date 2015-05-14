@@ -9,11 +9,20 @@ class ProxyHTTP(object):
     def get(self, page):
         target = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         target.connect(self.proxy)
+
         print 'Sending Hey',
         target.send("HEY")
         s_id = target.recv(1000)
         print "Received id:", s_id
 
+        target2 = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        target2.connect(self.proxy)
+        
+        print 'Sending Hey',
+        target2.send("HEY")
+        s_id2 = target2.recv(1000)
+        print "Received id:", s_id2
+        
         from http import HTTPRequest
         
         r = HTTPRequest("GET", "http://www.google.com/", "HTTP/1.0", body="Give me your website!!!", headers={"HOST": "www.google.com"})
@@ -23,6 +32,14 @@ class ProxyHTTP(object):
         print "GOT:", target.recv(100000)
         print "GOT:", target.recv(100000)
         target.send(s_id+" GOOD")
+        
+        r = HTTPRequest("GET", "http://inishia.com/", "HTTP/1.0", body="Give me your website!!!", headers={"HOST": "www.inishia.com"})
+        msg = r.packToPack()
+        
+        target2.send(s_id2+" 1 1 SEND " + msg)
+        print "GOT:", target2.recv(100000)
+        print "GOT:", target2.recv(100000)
+        target2.send(s_id2+" GOOD")
 
         # target.send(s_id+ " 1 1 Blabla bla")
         # target.send(s_id+ " 1 3 This ")

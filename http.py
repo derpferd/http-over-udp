@@ -339,7 +339,9 @@ class HTTPResponse(HTTPMessage):
 
     @staticmethod
     def buildWithPack(data):
+        print "Unpacking", data, "END"
         obj = msgpack.unpackb(data)
+        print "Finished"
 
         proto   = obj["proto"]
         code    = obj["code"]
