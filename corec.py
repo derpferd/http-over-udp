@@ -1,4 +1,12 @@
 """
+  This file has been modified by:
+      Jonathan Beaulieu
+      Alekander Straumann
+      
+  Changes Made:
+    Almost all the code has been changed however the general structure has been
+    kept.
+
   Copyright notice
   ================
   
@@ -69,7 +77,6 @@ class ProxyHandler(SocketServer.StreamRequestHandler):
 
         # Otherwise keep-alive is True, then go on and listen on the socket
         return self.handle()
-    
     
     def handle(self):
         global proxystate

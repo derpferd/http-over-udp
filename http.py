@@ -1,4 +1,13 @@
 """
+  This file has been modified by:
+      Jonathan Beaulieu
+      Alekander Straumann
+      
+  Changes made:
+    Made methods in HTTPRequest and HTTPResponse to pack and unpack from a
+    binary format. This is so we can send the Classes over UDP and recreate
+    them on the server in order to forward them to their destination.
+  
   Copyright notice
   ================
   

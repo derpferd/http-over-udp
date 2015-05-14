@@ -1,6 +1,14 @@
 #!/usr/bin/env python
 
 """
+  This file has been modified by:
+      Jonathan Beaulieu
+      Alekander Straumann
+  
+  Changes Made:
+    This file remains realivily untouched however the code in the libraries
+    that is file uses have been greatly changed.
+  
   Copyright notice
   ================
   
