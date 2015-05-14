@@ -17,6 +17,6 @@ To start the server:
   Now set up an http proxy to 127.0.0.1:8080 for HTTP
   Navigate to your website of choice. Right now you must choose a HTTP website or it won't load the page. 
   
-We used a logger and some other bits as templates for our design from this github projects:
+We used a logger, history, and a http file as a template for our design of the project from:
 https://github.com/tarlabs/proxpy
 The files we used are noted by the creators comments at the top of the files.
