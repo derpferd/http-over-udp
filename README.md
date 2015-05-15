@@ -12,7 +12,8 @@ This project is our attempt at creating a UDP proxy for a client that communicat
 
 
 To start the server:
-  run '''python server.py''' and '''python client.py'''
+  run the following on your server '''sudo python server.py -p 53'''
+  run the following on your client '''python client.py -r 127.0.0.1:53''' with the "127.0.0.1" as the ip of your server
   
   Now set up an http proxy to 127.0.0.1:8080 for HTTP
   Navigate to your website of choice. Right now you must choose a HTTP website or it won't load the page. 

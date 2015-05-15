@@ -223,7 +223,14 @@ class HTTPRequest(HTTPMessage):
 
     @staticmethod
     def buildWithPack(data):
-        obj = msgpack.unpackb(data)
+        try:
+            obj = msgpack.unpackb(data)
+        except msgpack.ExtraData as e:
+            print e, "\nExtra Data with msg:", data
+            return
+        except Exception as e:
+            print e, "\nError unpacking msg:", data
+            return
 
         method  = obj["method"]
         url     = obj["url"]
@@ -349,7 +356,14 @@ class HTTPResponse(HTTPMessage):
     @staticmethod
     def buildWithPack(data):
         print "Unpacking", data, "END"
-        obj = msgpack.unpackb(data)
+        try:
+            obj = msgpack.unpackb(data)
+        except msgpack.ExtraData as e:
+            print e, "\nExtra Data with msg:", data
+            return
+        except Exception as e:
+            print e, "\nError unpacking msg:", data
+            return
         print "Finished"
 
         proto   = obj["proto"]

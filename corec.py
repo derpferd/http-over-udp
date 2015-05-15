@@ -142,11 +142,16 @@ class ProxyHandler(SocketServer.StreamRequestHandler):
         if len(params) > 0:
             conn.send(params)
 
+    # returns a currently unused UDPConn if none available it makes one.
     def getOpenConnection(self):
+        global proxystate
+
         for conn in proxystate.proxyConnections:
             if not conn.in_use:
                 return conn
-        conn = UDPConn("127.0.0.1", 9090)
+
+        host, port = proxystate.redirect
+        conn = UDPConn(host, port)
         proxystate.proxyConnections.append(conn)
         return conn
 
@@ -162,26 +167,33 @@ class ProxyHandler(SocketServer.StreamRequestHandler):
         print self._id, "DID requ:", msg
         if msg != "GOOD":
             res = HTTPResponse.buildWithPack(msg)
+            if not res:
+                return None
             data = res.serialize()
             return data
         else:
-            if reg.getMethod == HTTPRequest.METHOD_CONNECT:
-                self.doCONNECT()
+            print "GOT GOOD", req, req.getMethod()
+            if req.getMethod() == HTTPRequest.METHOD_CONNECT:
+                print "Not implemented"
+                # self.doCONNECT()
             return None
 
-    def doCONNECT(self, host, port, req):
+    def doCONNECT(self):
+        print "Doing connect"
         global proxystate
 
         socket_req = self.request
         certfilename = DEFAULT_CERT_FILE
         socket_ssl = ssl.wrap_socket(socket_req, server_side = True, certfile = certfilename, 
                                      ssl_version = ssl.PROTOCOL_SSLv23, do_handshake_on_connect = False)
+        print "SSL Wrapped"
 
         HTTPSRequest.sendAck(socket_req)
         
         host, port = socket_req.getpeername()
-        proxystate.log.debug("Send ack to the peer %s on port %d for establishing SSL tunnel" % (host, port))
+        proxystate.log.info("Send ack to the peer %s on port %d for establishing SSL tunnel" % (host, port))
 
+        print "Starting Handshake..."
         while True:
             try:
                 socket_ssl.do_handshake()
@@ -189,6 +201,8 @@ class ProxyHandler(SocketServer.StreamRequestHandler):
             except (ssl.SSLError, IOError):
                 # proxystate.log.error(e.__str__())
                 return
+
+        print "SSL is all good"
 
         # Switch to new socket
         self.peer    = True
@@ -259,8 +273,8 @@ class ProxyState:
         # Internal state
         self.log        = Logger()
         self.history    = HttpHistory()
-        self.redirect   = None
-        self.proxyConnections = [UDPConn("127.0.0.1", 9090)]
+        self.redirect   = ("127.0.0.1", 9090)
+        self.proxyConnections = []
 
     @staticmethod
     def getTargetHost(req):

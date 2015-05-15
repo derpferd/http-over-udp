@@ -5,6 +5,7 @@ import time
 import sys
 import threading
 import httplib
+import getopt
 from http import HTTPRequest
 from http import HTTPResponse
 
@@ -13,6 +14,12 @@ from http import HTTPResponse
 BUFFER_SIZE = 4096
 # Set this lower for production, like 0.0001
 DELAY = 0.5
+
+def show_help():
+    print """\
+Syntax: python %s <options>
+ -p <port>         listen port  (default 8080)
+""" % sys.argv[0]
 
 # This function is used for spliting a string into an array of
 # string with the specified length. The last string may not be
@@ -127,24 +134,25 @@ class SessionThread(threading.Thread):
                 req = HTTPRequest.buildWithPack(data)
                 print req
                 print "Handling request"
-                
-                host, port = request.getHost()
-                
+
+                res = None
                 
                 if req.getMethod() == HTTPRequest.METHOD_GET:
+                    host, port = req.getHost()
                     res = self.doGET(host, port, req)
-                    self.sendResponse(res)
                 elif req.getMethod() == HTTPRequest.METHOD_POST:
+                    host, port = req.getHost()
                     res = self.doPOST(host, port, req)
-                    self.sendResponse(res)
                 elif req.getMethod() == HTTPRequest.METHOD_CONNECT:
-                    print "Not Implemented yet"
+                    print "Setting SSL to True"
+                    self.peer = True
+                    self.send("GOOD")
                     # res = self.doCONNECT(host, port, req)
                 # TODO: add POST and CONNECT
                 
-                print "Got res", res
-                
-                self.send(res.packToPack())
+                if res:
+                    print "Got res", res
+                    self.send(res.packToPack())
                 
                 print "Res sent"
             elif msg.split()[0] == "BYE":
@@ -236,6 +244,7 @@ class TheServer:
         self.server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.server.bind((host, port))
+        print "Server listening on", (host, port)
         self.server.setblocking(1)
         self.newid = 1
         self.channels = {}
@@ -270,11 +279,25 @@ class TheServer:
                     #TODO: implement bye
                     
                     self.channels[s_id].insert(0, data)
+
 #MAIN METHOD
 if __name__ == '__main__':
-        server = TheServer('', 9090)
-        try:
-            server.main_loop()
-        except KeyboardInterrupt:
-            print "Ctrl C - Stopping server"
-            sys.exit(1)
+    try:
+        opts, args = getopt.getopt(sys.argv[1:], "a:d:hp:r:vx:")
+    except getopt.GetoptError, e:
+        print str(e)
+        show_help()
+        exit(1)
+    
+    opts = dict([(k.lstrip('-'), v) for (k,v) in opts])
+    
+    port = 9090
+    if 'p' in opts:
+        port = int(opts['p'])
+    
+    server = TheServer('', port)
+    try:
+        server.main_loop()
+    except KeyboardInterrupt:
+        print "Ctrl C - Stopping server"
+        sys.exit(1)
